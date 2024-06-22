@@ -191,31 +191,34 @@ is_musl_based_distro() {
 get_current_os_name() {
     eval $invocation
 
-    local uname=$(uname)
-    if [ "$uname" = "Darwin" ]; then
+    local OSName="$(to_lowercase "$(uname -s)")"
+    case "$OSName" in
+    android|freebsd|haiku|linux|netbsd|openbsd|sunos)
+        os="$OSName"
+        if [ "$os" != "linux" ]; then
+            echo "$os"
+        else
+            local linux_platform_name=""
+            linux_platform_name="$(get_linux_platform_name)" || true
+
+            if [ "$linux_platform_name" = "rhel.6" ]; then
+                echo $linux_platform_name
+            elif is_musl_based_distro; then
+                echo "linux-musl"
+            elif [ "$linux_platform_name" = "linux-musl" ]; then
+                echo "linux-musl"
+            else
+                echo "linux"
+            fi
+        fi
+
+        return 0
+        ;;
+    darwin)
         echo "osx"
         return 0
-    elif [ "$uname" = "FreeBSD" ]; then
-        echo "freebsd"
-        return 0
-    elif [ "$uname" = "Linux" ]; then
-        local linux_platform_name=""
-        linux_platform_name="$(get_linux_platform_name)" || true
-
-        if [ "$linux_platform_name" = "rhel.6" ]; then
-            echo $linux_platform_name
-            return 0
-        elif is_musl_based_distro; then
-            echo "linux-musl"
-            return 0
-        elif [ "$linux_platform_name" = "linux-musl" ]; then
-            echo "linux-musl"
-            return 0
-        else
-            echo "linux"
-            return 0
-        fi
-    fi
+        ;;
+    esac
 
     say_err "OS name could not be detected: UName = $uname"
     return 1
@@ -295,40 +298,47 @@ combine_paths() {
 get_machine_architecture() {
     eval $invocation
 
-    if command -v uname > /dev/null; then
-        CPUName=$(uname -m)
-        case $CPUName in
-        armv1*|armv2*|armv3*|armv4*|armv5*|armv6*)
-            echo "armv6-or-below"
-            return 0
-            ;;
-        armv*l)
+    if [ "$(get_current_os_name)" = "sunos" ]; then
+        CPUName="$(isainfo -n)"
+    else
+        CPUName="$(uname -m)"
+    fi
+
+    case "$CPUName" in
+    armv1*|armv2*|armv3*|armv4*|armv5*|armv6*)
+        echo "armv6-or-below"
+        return 0
+        ;;
+    armv*l)
+        echo "arm"
+        return 0
+        ;;
+    aarch64|arm64)
+        if [ "$(getconf LONG_BIT)" -lt 64 ]; then
+            # This is 32-bit OS running on 64-bit CPU (for example Raspberry Pi OS)
             echo "arm"
             return 0
-            ;;
-        aarch64|arm64)
-            if [ "$(getconf LONG_BIT)" -lt 64 ]; then
-                # This is 32-bit OS running on 64-bit CPU (for example Raspberry Pi OS)
-                echo "arm"
-                return 0
-            fi
-            echo "arm64"
-            return 0
-            ;;
-        s390x)
-            echo "s390x"
-            return 0
-            ;;
-        ppc64le)
-            echo "ppc64le"
-            return 0
-            ;;
-        loongarch64)
-            echo "loongarch64"
-            return 0
-            ;;
-        esac
-    fi
+        fi
+        echo "arm64"
+        return 0
+        ;;
+    s390x)
+        echo "s390x"
+        return 0
+        ;;
+    ppc64le)
+        echo "ppc64le"
+        return 0
+        ;;
+    loongarch64)
+        echo "loongarch64"
+        return 0
+        ;;
+    riscv64)
+        echo "riscv64"
+        return 0
+        ;;
+    esac
 
     # Always default to 'x64'
     echo "x64"
